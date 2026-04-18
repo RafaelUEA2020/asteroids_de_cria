@@ -1,0 +1,32 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment files
+.env
+
+# macOS
+.DS_Store
+
+# Build / distribution
+build/
+dist/
+*.egg-info/
+
+# Logs
+*.log
+
+# IDE and local tooling
+.vscode/
+.claude/
+CLAUDE.md
+
+# Optional: ignore large audio files
+# assets/sounds/*.wav
