@@ -1,2 +1,4 @@
 # asteroids_de_cria
-chama pai
+#Instructions:
+We can add the new mecanics on commands, beacause the most of them can be implemented by pressing a button.
+
