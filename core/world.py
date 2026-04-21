@@ -28,6 +28,7 @@ class World:
         self.bullets = pg.sprite.Group()
         self.asteroids = pg.sprite.Group()
         self.ufos = pg.sprite.Group()
+        self.shields = pg.sprite.Group() 
         self.all_sprites = pg.sprite.Group()
 
         self.scores: Dict[PlayerId, int] = {}
@@ -40,8 +41,9 @@ class World:
         self._collision_mgr = CollisionManager()
 
         self.game_over = False
-
+        self.shield_spawn_timer = float(C.SHIELD_SPAWN_DELAY_MIN)
         self.spawn_player(C.LOCAL_PLAYER_ID)
+        
 
     def begin_frame(self) -> None:
         self.events.clear()
@@ -114,6 +116,27 @@ class World:
         self._handle_collisions()
         self._maybe_start_next_wave(dt)
 
+    def _update_timers(self, dt: float) -> None:
+        # Timer do UFO
+        self.ufo_timer -= dt
+        if self.ufo_timer <= 0.0:
+            self.spawn_ufo()
+            self.ufo_timer = float(C.UFO_SPAWN_EVERY)
+
+        # Lógica de Spawn Automático do Escudo
+        if self.wave > 0: # Só spawna se a partida começou
+            self.shield_spawn_timer -= dt
+            if self.shield_spawn_timer <= 0.0:
+                # Se ainda houver vaga no mapa (limite de 2)
+                if len(self.shields) < C.SHIELD_MAX_PICKUPS:
+                    self.spawn_shield_pickup()
+                
+                # Sorteia o próximo tempo baseado no seu config.py
+                self.shield_spawn_timer = uniform(
+                    C.SHIELD_SPAWN_DELAY_MIN, 
+                    C.SHIELD_SPAWN_DELAY_MAX
+                )
+
     def _apply_commands(
         self,
         dt: float,
@@ -164,12 +187,6 @@ class World:
                 nearest = ship
         return nearest.pos if nearest else None
 
-    def _update_timers(self, dt: float) -> None:
-        self.ufo_timer -= dt
-        if self.ufo_timer <= 0.0:
-            self.spawn_ufo()
-            self.ufo_timer = float(C.UFO_SPAWN_EVERY)
-
     def _maybe_start_next_wave(self, dt: float) -> None:
         if self.asteroids:
             return
@@ -180,6 +197,12 @@ class World:
             self.wave_cool = float(C.WAVE_DELAY)
 
     def _handle_collisions(self) -> None:
+        for player_id, ship in self.ships.items():
+            pickups_hit = pg.sprite.spritecollide(ship, self.shields, True)
+            if pickups_hit:
+                ship.activate_shield() 
+                self.events.append("shield_up") 
+
         result = self._collision_mgr.resolve(
             self.ships, self.bullets, self.asteroids, self.ufos,
         )
@@ -209,3 +232,31 @@ class World:
         self.events.append("ship_explosion")
         if all(v <= 0 for v in self.lives.values()):
             self.game_over = True
+
+    def spawn_shield_pickup(self) -> None:
+        if len(self.shields) >= C.SHIELD_MAX_PICKUPS:
+            return
+
+        # Sorteia uma posição em qualquer lugar da tela
+        def get_random_pos():
+            return Vec(
+                uniform(60, C.WIDTH - 60), 
+                uniform(60, C.HEIGHT - 60)
+            )
+
+        pos = get_random_pos()
+        
+        # Garante que não spawna colado no jogador
+        ship_positions = [s.pos for s in self.ships.values()]
+        
+        # Tenta re-sortear se estiver muito perto de um jogador (limite de 10 tentativas para não travar)
+        for _ in range(10):
+            if any((pos - sp).length() < C.SHIELD_PICKUP_SEPARATION for sp in ship_positions):
+                pos = get_random_pos()
+            else:
+                break
+
+        from core.entities import ShieldPickup 
+        pickup = ShieldPickup(pos)
+        self.shields.add(pickup)
+        self.all_sprites.add(pickup)

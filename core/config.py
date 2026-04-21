@@ -21,6 +21,18 @@ SHIP_FRICTION = 0.995
 SHIP_FIRE_RATE = 0.2
 SHIP_BULLET_SPEED = 420.0
 HYPERSPACE_COST = 250
+
+# Shield Mechanics
+SHIELD_DURATION = 3.0            # Quanto tempo o escudo fica ativo na nave
+SHIELD_PICKUP_RADIUS = 14        # Tamanho do item para coletar
+SHIELD_COLOR = (120, 220, 255)   
+SHIELD_MAX_PICKUPS = 2           # Limite de escudos ativos simultâneos no mapa
+SHIELD_PICKUP_SEPARATION = 100   # Distância mínima entre spawns de escudos
+SHIELD_PICKUP_LIFETIME = 10.0    # Tempo que o item fica flutuando antes de sumir
+SHIELD_PICKUP_WARN_TIME = 3.0  
+SHIELD_SPAWN_DELAY_MIN = 4.0     
+SHIELD_SPAWN_DELAY_MAX = 14.0    
+
 SHIP_NOSE_ANGLE = 140.0
 SHIP_NOSE_SCALE = 0.9
 BULLET_SPAWN_OFFSET = 6
