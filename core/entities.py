@@ -7,7 +7,7 @@ import pygame as pg
 
 from core import config as C
 from core.commands import PlayerCommand
-from core.utils import Vec, angle_to_vec, wrap_pos
+from core.utils import Vec, angle_to_vec, rand_unit_vec, wrap_pos
 
 PlayerId = int
 UFO_BULLET_OWNER = -10
@@ -92,6 +92,8 @@ class Ship(pg.sprite.Sprite):
         self.cool = 0.0
         self.target_pos: Vec | None = None
         self.invuln = 0.0
+        self.shield_timer = 0.0
+        self.has_shield = False
         self.r = int(C.SHIP_RADIUS)
         self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
@@ -120,11 +122,10 @@ class Ship(pg.sprite.Sprite):
         if self.cool > 0.0:
             return None
 
-        count = 0
-        for bullet in bullets:
-            if getattr(bullet, "owner_id", None) == self.player_id:
-                count += 1
-
+        count = sum(
+            1 for b in bullets
+            if getattr(b, "owner_id", None) == self.player_id
+        )
         if count >= C.MAX_BULLETS_PER_PLAYER:
             return None
 
@@ -140,16 +141,23 @@ class Ship(pg.sprite.Sprite):
         self.vel.xy = (0, 0)
         self.invuln = float(C.SAFE_SPAWN_TIME)
 
+    def activate_shield(self) -> None:
+        # Renova ou estende — nunca encurta um escudo já ativo
+        self.shield_timer = max(self.shield_timer, float(C.SHIELD_DURATION))
+        self.has_shield = True
+
     def update(self, dt: float) -> None:
         if self.cool > 0.0:
-            self.cool -= dt
-            if self.cool < 0.0:
-                self.cool = 0.0
+            self.cool = max(0.0, self.cool - dt)
 
         if self.invuln > 0.0:
-            self.invuln -= dt
-            if self.invuln < 0.0:
-                self.invuln = 0.0
+            self.invuln = max(0.0, self.invuln - dt)
+
+        if self.shield_timer > 0.0:
+            self.shield_timer -= dt
+            if self.shield_timer <= 0.0:
+                self.shield_timer = 0.0
+                self.has_shield = False          # expira corretamente
 
         self.pos += self.vel * dt
         self.pos = wrap_pos(self.pos)
@@ -198,19 +206,13 @@ class UFO(pg.sprite.Sprite):
     def _lock_small_move_dir(self, target_pos: Vec | None) -> None:
         if target_pos is None:
             ang = uniform(0.0, 360.0)
-            self.move_dir = Vec(
-                math.cos(math.radians(ang)),
-                math.sin(math.radians(ang)),
-            )
+            self.move_dir = Vec(math.cos(math.radians(ang)), math.sin(math.radians(ang)))
             return
 
         to_target = Vec(target_pos) - self.pos
         if to_target.length_squared() < 1e-6:
             ang = uniform(0.0, 360.0)
-            self.move_dir = Vec(
-                math.cos(math.radians(ang)),
-                math.sin(math.radians(ang)),
-            )
+            self.move_dir = Vec(math.cos(math.radians(ang)), math.sin(math.radians(ang)))
             return
 
         self.move_dir = to_target.normalize()
@@ -250,10 +252,7 @@ class UFO(pg.sprite.Sprite):
 
     def update(self, dt: float) -> None:
         if self.cool > 0.0:
-            self.cool -= dt
-            if self.cool < 0.0:
-                self.cool = 0.0
-
+            self.cool = max(0.0, self.cool - dt)
         if self.small:
             self._update_pursue(dt)
         else:
@@ -274,9 +273,8 @@ class UFO(pg.sprite.Sprite):
 
     def _kill_if_outside_screen(self) -> None:
         margin = self.r
-        out_x = self.pos.x < -margin or self.pos.x > C.WIDTH + margin
-        out_y = self.pos.y < -margin or self.pos.y > C.HEIGHT + margin
-        if out_x or out_y:
+        if (self.pos.x < -margin or self.pos.x > C.WIDTH + margin or
+                self.pos.y < -margin or self.pos.y > C.HEIGHT + margin):
             self.kill()
 
     def try_fire(self) -> "Bullet | None":
@@ -298,18 +296,63 @@ class UFO(pg.sprite.Sprite):
             if to_target.length_squared() < 1e-6:
                 return None
             dirv = to_target.normalize()
-
-        jitter = (
-            C.UFO_AIM_JITTER_DEG_SMALL
-            if self.small
-            else C.UFO_AIM_JITTER_DEG_BIG
-        )
+        jitter = C.UFO_AIM_JITTER_DEG_SMALL if self.small else C.UFO_AIM_JITTER_DEG_BIG
         dirv = rotate_vec(dirv, uniform(-jitter, jitter))
 
         vel = dirv * C.UFO_BULLET_SPEED
-        ttl = float(C.UFO_BULLET_TTL)
+
 
         rate = C.UFO_FIRE_RATE_SMALL if self.small else C.UFO_FIRE_RATE_BIG
         self.cool = float(rate)
 
-        return Bullet(UFO_BULLET_OWNER, self.pos, vel, ttl=ttl)
+        return Bullet(UFO_BULLET_OWNER, self.pos, vel, ttl=float(C.UFO_BULLET_TTL))
+
+
+class ShieldPickup(pg.sprite.Sprite):
+    """Collectible item that grants a temporary shield."""
+
+    def __init__(self, pos: Vec) -> None:
+        super().__init__()
+        self.pos = Vec(pos)
+        # Drift lento em direção aleatória
+        self.vel = rand_unit_vec() * uniform(18.0, 36.0)
+        self._base_r = int(C.SHIELD_PICKUP_RADIUS)
+        self.r = self._base_r
+        self.ttl = float(C.SHIELD_PICKUP_LIFETIME)
+        self._pulse = 0.0          # fase do pulso visual
+        self._draw_color = C.SHIELD_COLOR
+        self._draw_visible = True
+        self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
+        self.rect.center = (int(self.pos.x), int(self.pos.y))
+
+    def update(self, dt: float) -> None:
+        self.pos += self.vel * dt
+        self.pos = wrap_pos(self.pos)
+
+        self._pulse = (self._pulse + dt * 3.5) % (2 * math.pi)
+
+        self.ttl -= dt
+        if self.ttl <= 0.0:
+            self.kill()
+            return
+
+        warn = float(C.SHIELD_PICKUP_WARN_TIME)
+        if self.ttl > warn:
+            self.r = self._base_r
+            self._draw_color = C.SHIELD_COLOR
+            self._draw_visible = True
+        else:
+            urgency = 1.0 - max(0.0, self.ttl / warn)
+            self.r = int(self._base_r * (1.0 - urgency * 0.4))
+            blink_rate = 8.0 + urgency * 16.0
+            self._draw_visible = int(self.ttl * blink_rate) % 2 == 0
+            c = C.SHIELD_COLOR
+            self._draw_color = (
+                min(255, int(c[0] + (255 - c[0]) * urgency * 0.9)),
+                min(255, int(c[1] + (255 - c[1]) * urgency * 0.4)),
+                max(80,  int(c[2] * (1.0 - urgency * 0.4))),
+            )
+
+        side = max(4, self.r * 2)
+        self.rect = pg.Rect(0, 0, side, side)
+        self.rect.center = (int(self.pos.x), int(self.pos.y))

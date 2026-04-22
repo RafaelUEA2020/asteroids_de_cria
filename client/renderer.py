@@ -1,9 +1,10 @@
 """Client-side rendering (pygame)."""
+import math
 
 import pygame as pg
 
 from core import config as C
-from core.entities import Asteroid, Bullet, Ship, UFO
+from core.entities import Asteroid, Bullet, Ship, UFO, ShieldPickup
 from core.scene import SceneState
 
 
@@ -27,6 +28,7 @@ class Renderer:
             Asteroid: self._draw_asteroid,
             Ship: self._draw_ship,
             UFO: self._draw_ufo,
+            ShieldPickup: self._draw_shield_pickup,
         }
 
     def clear(self) -> None:
@@ -102,31 +104,59 @@ class Renderer:
         )
 
     def _draw_asteroid(self, asteroid: Asteroid) -> None:
-        points = []
-        for point in asteroid.poly:
-            px = int(asteroid.pos.x + point.x)
-            py = int(asteroid.pos.y + point.y)
-            points.append((px, py))
-        pg.draw.polygon(self.screen, self.config.WHITE, points, width=1)
-
-    def _draw_ship(self, ship: Ship) -> None:
-        p1, p2, p3 = ship.ship_points()
         points = [
-            (int(p1.x), int(p1.y)),
-            (int(p2.x), int(p2.y)),
-            (int(p3.x), int(p3.y)),
+            (int(asteroid.pos.x + p.x), int(asteroid.pos.y + p.y))
+            for p in asteroid.poly
         ]
         pg.draw.polygon(self.screen, self.config.WHITE, points, width=1)
 
+    def _draw_ship(self, ship: Ship) -> None:
+        cx, cy = int(ship.pos.x), int(ship.pos.y)
+
+        # Escudo ativo: anel duplo pulsante
+        if getattr(ship, "has_shield", False):
+            col = getattr(self.config, "SHIELD_COLOR", (120, 220, 255))
+            pulse = int(ship.shield_timer * 12) % 2
+            ro = ship.r + 8 + pulse * 3
+            pg.draw.circle(self.screen, col, (cx, cy), ro, width=2)
+            pg.draw.circle(self.screen, col, (cx, cy), ro + 6, width=1)
+
+        # Corpo da nave
+        p1, p2, p3 = ship.ship_points()
+        points = [(int(p.x), int(p.y)) for p in (p1, p2, p3)]
+        pg.draw.polygon(self.screen, self.config.WHITE, points, width=1)
+
         if ship.invuln > 0.0 and int(ship.invuln * 10) % 2 == 0:
-            center = (int(ship.pos.x), int(ship.pos.y))
             pg.draw.circle(
                 self.screen,
                 self.config.WHITE,
-                center,
+                (cx, cy),
                 ship.r + 6,
                 width=1,
             )
+
+    def _draw_shield_pickup(self, pickup: ShieldPickup) -> None:
+    
+        if not getattr(pickup, "_draw_visible", True):
+            return
+
+        col = getattr(pickup, "_draw_color", C.SHIELD_COLOR)
+        r = getattr(pickup, "r", C.SHIELD_PICKUP_RADIUS)
+        pulse = getattr(pickup, "_pulse", 0.0)
+        cx, cy = int(pickup.pos.x), int(pickup.pos.y)
+
+        # Anel externo
+        line_w = 2 if pickup.ttl > C.SHIELD_PICKUP_WARN_TIME else 1
+        pg.draw.circle(self.screen, col, (cx, cy), r, width=max(1, line_w))
+
+        # Cruz interna
+        arm = int(r * 0.55)
+        pg.draw.line(self.screen, col, (cx - arm, cy), (cx + arm, cy), max(1, line_w))
+        pg.draw.line(self.screen, col, (cx, cy - arm), (cx, cy + arm), max(1, line_w))
+
+        # Ponto central pulsante
+        dot_r = max(1, int(1.5 + 1.5 * (math.sin(pulse) + 1) / 2))
+        pg.draw.circle(self.screen, col, (cx, cy), dot_r)
 
     def _draw_ufo(self, ufo: UFO) -> None:
         width = ufo.r * 2

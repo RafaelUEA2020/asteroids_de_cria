@@ -119,7 +119,15 @@ class CollisionManager:
                 continue
             for ast in asteroids:
                 if (ast.pos - ship.pos).length() < (ast.r + ship.r):
-                    result.ship_deaths.append(ship.player_id)
+                    if ship.has_shield:
+                        # O escudo absorve o impacto
+                        ship.shield_timer = 0.0
+                        ship.has_shield = False
+                        ship.invuln = 1.0 # Ganha 1s de invulnerabilidade extra
+                        result.events.append("asteroid_explosion") # Som de impacto
+                        self._split_asteroid(ast, result=result) 
+                    else:
+                        result.ship_deaths.append(ship.player_id)
                     return
 
     def _ship_vs_ufo_bullets(
@@ -136,7 +144,13 @@ class CollisionManager:
                     continue
                 if (bullet.pos - ship.pos).length() < (bullet.r + ship.r):
                     bullet.kill()
-                    result.ship_deaths.append(ship.player_id)
+                    if ship.has_shield:
+                        # Escudo absorve o tiro do UFO
+                        ship.shield_timer = 0.0
+                        ship.has_shield = False
+                        result.events.append("asteroid_explosion")
+                    else:
+                        result.ship_deaths.append(ship.player_id)
                     return
 
     def _split_asteroid(
