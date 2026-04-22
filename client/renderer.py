@@ -4,7 +4,7 @@ import math
 import pygame as pg
 
 from core import config as C
-from core.entities import Asteroid, Bullet, Ship, UFO, ShieldPickup
+from core.entities import Asteroid, Bullet, Ship, UFO, ShieldPickup, WeaponPickup
 from core.scene import SceneState
 
 
@@ -29,6 +29,7 @@ class Renderer:
             Ship: self._draw_ship,
             UFO: self._draw_ufo,
             ShieldPickup: self._draw_shield_pickup,
+            WeaponPickup: self._draw_weapon_pickup,
         }
 
     def clear(self) -> None:
@@ -47,6 +48,7 @@ class Renderer:
         lives: int,
         wave: int,
         state: SceneState,
+        ship: Ship | None = None,
     ) -> None:
         if state != SceneState.PLAY:
             return
@@ -54,6 +56,19 @@ class Renderer:
         text = f"SCORE {score:06d}   LIVES {lives}   WAVE {wave}"
         label = self.font.render(text, True, self.config.WHITE)
         self.screen.blit(label, (10, 10))
+
+        # HUD do power-up de arma (canto superior direito)
+        if ship is not None and ship.weapon_mode and ship.weapon_time > 0:
+            mode_names = {"double": "DUPLO", "triple": "TRIPLO", "rapid": "RAPIDO"}
+            name = mode_names.get(ship.weapon_mode, "")
+            col = getattr(self.config, "WEAPON_PICKUP_COLOR", (255, 220, 80))
+            wl = self.font.render(
+                f"ARMA: {name}  {ship.weapon_time:.1f}s", True, col
+            )
+            self.screen.blit(wl, (self.config.WIDTH - wl.get_width() - 10, 10))
+            bw = max(1, int(150 * (ship.weapon_time / self.config.WEAPON_DURATION)))
+            pg.draw.rect(self.screen, col,
+                         (self.config.WIDTH - bw - 10, 36, bw, 4))
 
     def draw_menu(self) -> None:
         self._draw_text(
@@ -135,6 +150,13 @@ class Renderer:
                 width=1,
             )
 
+        # Anel dourado pulsante do power-up de arma
+        if getattr(ship, "weapon_mode", None) and ship.weapon_time > 0.0:
+            col = getattr(self.config, "WEAPON_PICKUP_COLOR", (255, 220, 80))
+            pulse = int(ship.weapon_time * 8) % 2
+            rw = ship.r + 14 + pulse * 2
+            pg.draw.circle(self.screen, col, (cx, cy), rw, width=1)
+
     def _draw_shield_pickup(self, pickup: ShieldPickup) -> None:
     
         if not getattr(pickup, "_draw_visible", True):
@@ -157,6 +179,31 @@ class Renderer:
         # Ponto central pulsante
         dot_r = max(1, int(1.5 + 1.5 * (math.sin(pulse) + 1) / 2))
         pg.draw.circle(self.screen, col, (cx, cy), dot_r)
+
+    def _draw_weapon_pickup(self, pickup: WeaponPickup) -> None:
+        if not getattr(pickup, "_draw_visible", True):
+            return
+
+        col = getattr(pickup, "_draw_color", C.WEAPON_PICKUP_COLOR)
+        r = int(getattr(pickup, "r", C.WEAPON_PICKUP_RADIUS))
+        cx, cy = int(pickup.pos.x), int(pickup.pos.y)
+
+        # Losango
+        pts = [
+            (cx,     cy - r),
+            (cx + r, cy),
+            (cx,     cy + r),
+            (cx - r, cy),
+        ]
+        pg.draw.polygon(self.screen, col, pts, width=2)
+
+        # Label no centro
+        label_map = {"double": "2x", "triple": "3x", "rapid": ">>"}
+        label = label_map.get(pickup.mode, "?")
+        font = pg.font.SysFont("consolas", max(8, int(r * 0.85)))
+        surf_txt = font.render(label, True, col)
+        rect_txt = surf_txt.get_rect(center=(cx, cy))
+        self.screen.blit(surf_txt, rect_txt)
 
     def _draw_ufo(self, ufo: UFO) -> None:
         width = ufo.r * 2

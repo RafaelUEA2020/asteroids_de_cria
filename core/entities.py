@@ -94,6 +94,8 @@ class Ship(pg.sprite.Sprite):
         self.invuln = 0.0
         self.shield_timer = 0.0
         self.has_shield = False
+        self.weapon_mode: str | None = None   # "double" | "triple" | "rapid" | None
+        self.weapon_time: float = 0.0
         self.r = int(C.SHIP_RADIUS)
         self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
 
@@ -102,7 +104,7 @@ class Ship(pg.sprite.Sprite):
         cmd: PlayerCommand,
         dt: float,
         bullets: pg.sprite.Group,
-    ) -> "Bullet | None":
+    ) -> "list[Bullet]":
         if cmd.rotate_left and not cmd.rotate_right:
             self.angle -= C.SHIP_TURN_SPEED * dt
         elif cmd.rotate_right and not cmd.rotate_left:
@@ -116,25 +118,46 @@ class Ship(pg.sprite.Sprite):
         if cmd.shoot:
             return self._try_fire(bullets)
 
-        return None
+        return []
 
-    def _try_fire(self, bullets: pg.sprite.Group) -> "Bullet | None":
+    def _try_fire(self, bullets: pg.sprite.Group) -> "list[Bullet]":
         if self.cool > 0.0:
-            return None
+            return []
 
-        count = sum(
-            1 for b in bullets
-            if getattr(b, "owner_id", None) == self.player_id
-        )
-        if count >= C.MAX_BULLETS_PER_PLAYER:
-            return None
+        # Cap de balas — maior no modo rápido
+        max_b = (C.WEAPON_RAPID_MAX_BULLETS
+                 if self.weapon_mode == "rapid"
+                 else C.MAX_BULLETS_PER_PLAYER)
+        count = sum(1 for b in bullets if getattr(b, "owner_id", None) == self.player_id)
+        if count >= max_b:
+            return []
 
-        dirv = angle_to_vec(self.angle)
-        pos = self.pos + dirv * (self.r + C.BULLET_SPAWN_OFFSET)
-        vel = self.vel + dirv * C.SHIP_BULLET_SPEED
+        fire_rate = (C.WEAPON_RAPID_FIRE_RATE
+                     if self.weapon_mode == "rapid"
+                     else C.SHIP_FIRE_RATE)
+        self.cool = float(fire_rate)
 
-        self.cool = float(C.SHIP_FIRE_RATE)
-        return Bullet(self.player_id, pos, vel, ttl=C.BULLET_TTL)
+        if self.weapon_mode == "double":
+            offsets = [-C.WEAPON_DOUBLE_SPREAD / 2,
+                        C.WEAPON_DOUBLE_SPREAD / 2]
+        elif self.weapon_mode == "triple":
+            half = C.WEAPON_TRIPLE_SPREAD / 2
+            offsets = [-half, 0.0, half]
+        else:
+            offsets = [0.0]
+
+        result = []
+        for angle_off in offsets:
+            d = angle_to_vec(self.angle + angle_off)
+            pos = self.pos + d * (self.r + C.BULLET_SPAWN_OFFSET)
+            vel = self.vel + d * C.SHIP_BULLET_SPEED
+            result.append(Bullet(self.player_id, pos, vel, ttl=C.BULLET_TTL))
+        return result
+
+    def apply_weapon(self, mode: str) -> None:
+        """Activate or refresh the weapon power-up."""
+        self.weapon_mode = mode
+        self.weapon_time = float(C.WEAPON_DURATION)
 
     def hyperspace(self) -> None:
         self.pos = Vec(uniform(0, C.WIDTH), uniform(0, C.HEIGHT))
@@ -158,6 +181,12 @@ class Ship(pg.sprite.Sprite):
             if self.shield_timer <= 0.0:
                 self.shield_timer = 0.0
                 self.has_shield = False          # expira corretamente
+
+        if self.weapon_time > 0.0:
+            self.weapon_time -= dt
+            if self.weapon_time <= 0.0:
+                self.weapon_mode = None
+                self.weapon_time = 0.0
 
         self.pos += self.vel * dt
         self.pos = wrap_pos(self.pos)
@@ -353,6 +382,54 @@ class ShieldPickup(pg.sprite.Sprite):
                 max(80,  int(c[2] * (1.0 - urgency * 0.4))),
             )
 
+        side = max(4, self.r * 2)
+        self.rect = pg.Rect(0, 0, side, side)
+        self.rect.center = (int(self.pos.x), int(self.pos.y))
+
+
+class WeaponPickup(pg.sprite.Sprite):
+    """Collectible item that grants a temporary weapon buff."""
+
+    MODES = ("double", "triple", "rapid")
+    _LABELS = {"double": "2x", "triple": "3x", "rapid": ">>"}
+
+    def __init__(self, pos: Vec) -> None:
+        super().__init__()
+        import random
+        self.pos = Vec(pos)
+        self.vel = rand_unit_vec() * uniform(20.0, 45.0)
+        self.mode = random.choice(self.MODES)
+        self._base_r = int(C.WEAPON_PICKUP_RADIUS)
+        self.r = self._base_r
+        self.ttl = float(C.WEAPON_PICKUP_LIFETIME)
+        self._draw_color = C.WEAPON_PICKUP_COLOR
+        self._draw_visible = True
+        self.rect = pg.Rect(0, 0, self.r * 2, self.r * 2)
+        self.rect.center = (int(self.pos.x), int(self.pos.y))
+
+    def update(self, dt: float) -> None:
+        self.pos += self.vel * dt
+        self.pos = wrap_pos(self.pos)
+        self.ttl -= dt
+        if self.ttl <= 0.0:
+            self.kill()
+            return
+        warn = float(C.WEAPON_PICKUP_WARN_TIME)
+        if self.ttl > warn:
+            self._draw_color = C.WEAPON_PICKUP_COLOR
+            self._draw_visible = True
+            self.r = self._base_r
+        else:
+            urgency = 1.0 - max(0.0, self.ttl / warn)
+            self.r = int(self._base_r * (1.0 - urgency * 0.45))
+            blink_rate = 10.0 + urgency * 18.0
+            self._draw_visible = int(self.ttl * blink_rate) % 2 == 0
+            c = C.WEAPON_PICKUP_COLOR
+            self._draw_color = (
+                c[0],
+                min(255, int(c[1] * (1.0 - urgency * 0.5))),
+                max(0,   int(c[2] * (1.0 - urgency * 0.9))),
+            )
         side = max(4, self.r * 2)
         self.rect = pg.Rect(0, 0, side, side)
         self.rect.center = (int(self.pos.x), int(self.pos.y))
