@@ -9,7 +9,7 @@ import pygame as pg
 from core import config as C
 from core.collisions import CollisionManager
 from core.commands import PlayerCommand
-from core.entities import Asteroid, Ship, UFO, WeaponPickup
+from core.entities import Asteroid, BlackHole, Ship, UFO, WeaponPickup
 from core.utils import Vec, rand_edge_pos
 
 PlayerId = int
@@ -30,6 +30,7 @@ class World:
         self.ufos = pg.sprite.Group()
         self.shields = pg.sprite.Group() 
         self.weapon_pickups = pg.sprite.Group()
+        self.black_holes = pg.sprite.Group()
         self.all_sprites = pg.sprite.Group()
 
         self.scores: Dict[PlayerId, int] = {}
@@ -43,6 +44,7 @@ class World:
 
         self.game_over = False
         self.shield_spawn_timer = float(C.SHIELD_SPAWN_DELAY_MIN)
+        self.black_hole_spawn_timer = float(C.BLACK_HOLE_SPAWN_DELAY_MIN)
         self.spawn_player(C.LOCAL_PLAYER_ID)
 
 
@@ -110,11 +112,13 @@ class World:
             return
 
         self._apply_commands(dt, commands_by_player_id)
+        self._apply_black_hole_gravity(dt)
         self.all_sprites.update(dt)
 
         self._update_ufos(dt)
         self._update_timers(dt)
         self._handle_collisions()
+        self._handle_black_hole_capture()
         self._maybe_start_next_wave(dt)
 
     def _update_timers(self, dt: float) -> None:
@@ -136,6 +140,17 @@ class World:
                 self.shield_spawn_timer = uniform(
                     C.SHIELD_SPAWN_DELAY_MIN, 
                     C.SHIELD_SPAWN_DELAY_MAX
+                )
+
+        if self.wave > 0:
+            self.black_hole_spawn_timer -= dt
+            if self.black_hole_spawn_timer <= 0.0:
+                if len(self.black_holes) < C.BLACK_HOLE_MAX_ACTIVE:
+                    self.spawn_black_hole()
+
+                self.black_hole_spawn_timer = uniform(
+                    C.BLACK_HOLE_SPAWN_DELAY_MIN,
+                    C.BLACK_HOLE_SPAWN_DELAY_MAX,
                 )
 
     def _apply_commands(
@@ -177,6 +192,31 @@ class World:
 
             if not ufo.alive():
                 self.ufos.remove(ufo)
+
+    def _apply_black_hole_gravity(self, dt: float) -> None:
+        if not self.black_holes:
+            return
+
+        for ship in self.ships.values():
+            strongest_pull = Vec(0, 0)
+            strongest_force = 0.0
+
+            for black_hole in self.black_holes:
+                offset = black_hole.pos - ship.pos
+                dist = offset.length()
+                if dist <= 1e-6 or dist > black_hole.attract_radius:
+                    continue
+
+                influence = 1.0 - (dist / black_hole.attract_radius)
+                force = C.BLACK_HOLE_GRAVITY * influence
+                if force <= strongest_force:
+                    continue
+
+                strongest_force = force
+                strongest_pull = offset.normalize() * force
+
+            if strongest_force > 0.0:
+                ship.vel += strongest_pull * dt
 
     def _get_nearest_ship_pos(self, from_pos: Vec) -> Vec | None:
         """Return position of the nearest living ship to from_pos."""
@@ -252,6 +292,16 @@ class World:
             if ship is not None:
                 self._ship_die(ship)
 
+    def _handle_black_hole_capture(self) -> None:
+        if self.game_over:
+            return
+
+        for ship in self.ships.values():
+            for black_hole in self.black_holes:
+                if (ship.pos - black_hole.pos).length() < (ship.r + black_hole.capture_radius):
+                    self._black_hole_capture(ship)
+                    return
+
     def _ship_die(self, ship: Ship) -> None:
         pid = ship.player_id
         self.lives[pid] -= 1
@@ -263,6 +313,11 @@ class World:
         self.events.append("ship_explosion")
         if all(v <= 0 for v in self.lives.values()):
             self.game_over = True
+
+    def _black_hole_capture(self, ship: Ship) -> None:
+        self.lives[ship.player_id] = 0
+        self.events.append("ship_explosion")
+        self.game_over = True
 
     def spawn_shield_pickup(self) -> None:
         if len(self.shields) >= C.SHIELD_MAX_PICKUPS:
@@ -291,3 +346,34 @@ class World:
         pickup = ShieldPickup(pos)
         self.shields.add(pickup)
         self.all_sprites.add(pickup)
+
+    def spawn_black_hole(self) -> None:
+        if len(self.black_holes) >= C.BLACK_HOLE_MAX_ACTIVE:
+            return
+
+        def get_random_pos() -> Vec:
+            margin = C.BLACK_HOLE_CAPTURE_RADIUS + 40
+            return Vec(
+                uniform(margin, C.WIDTH - margin),
+                uniform(margin, C.HEIGHT - margin),
+            )
+
+        ship_positions = [s.pos for s in self.ships.values()]
+        pos = get_random_pos()
+
+        for _ in range(12):
+            too_close_to_ship = any(
+                (pos - ship_pos).length() < C.BLACK_HOLE_MIN_SHIP_DISTANCE
+                for ship_pos in ship_positions
+            )
+            too_close_to_hole = any(
+                (pos - black_hole.pos).length() < C.BLACK_HOLE_ATTRACT_RADIUS
+                for black_hole in self.black_holes
+            )
+            if not too_close_to_ship and not too_close_to_hole:
+                break
+            pos = get_random_pos()
+
+        black_hole = BlackHole(pos)
+        self.black_holes.add(black_hole)
+        self.all_sprites.add(black_hole)
