@@ -46,7 +46,10 @@ class World:
         self.shield_spawn_timer = float(C.SHIELD_SPAWN_DELAY_MIN)
         self.black_hole_spawn_timer = float(C.BLACK_HOLE_SPAWN_DELAY_MIN)
         self.spawn_player(C.LOCAL_PLAYER_ID)
-
+        
+        self.freeze_active = False
+        self.freeze_timer = 0.0
+        
 
     def begin_frame(self) -> None:
         self.events.clear()
@@ -108,12 +111,22 @@ class World:
     ) -> None:
         self.begin_frame()
 
+        # Atualiza freeze
+        if self.freeze_active:
+            self.freeze_timer -= dt
+            if self.freeze_timer <= 0.0:
+                self.freeze_active = False
+                
         if self.game_over:
             return
 
         self._apply_commands(dt, commands_by_player_id)
         self._apply_black_hole_gravity(dt)
-        self.all_sprites.update(dt)
+        
+        for sprite in self.all_sprites:
+            if self.freeze_active and isinstance(sprite, Asteroid):
+                continue
+            sprite.update(dt)
 
         self._update_ufos(dt)
         self._update_timers(dt)
@@ -377,3 +390,7 @@ class World:
         black_hole = BlackHole(pos)
         self.black_holes.add(black_hole)
         self.all_sprites.add(black_hole)
+
+    def activate_freeze(self, duration: float) -> None:
+        self.freeze_active = True
+        self.freeze_timer = duration
