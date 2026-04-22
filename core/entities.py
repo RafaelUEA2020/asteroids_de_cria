@@ -356,3 +356,22 @@ class ShieldPickup(pg.sprite.Sprite):
         side = max(4, self.r * 2)
         self.rect = pg.Rect(0, 0, side, side)
         self.rect.center = (int(self.pos.x), int(self.pos.y))
+
+
+class BlackHole(pg.sprite.Sprite):
+    """Stationary hazard that pulls nearby ships and captures them."""
+
+    def __init__(self, pos: Vec) -> None:
+        super().__init__()
+        self.pos = Vec(pos)
+        self.r = int(C.BLACK_HOLE_RADIUS)
+        self.attract_radius = float(C.BLACK_HOLE_ATTRACT_RADIUS)
+        self.capture_radius = float(C.BLACK_HOLE_CAPTURE_RADIUS)
+        self._pulse = 0.0
+        side = self.capture_radius * 2
+        self.rect = pg.Rect(0, 0, side, side)
+        self.rect.center = (int(self.pos.x), int(self.pos.y))
+
+    def update(self, dt: float) -> None:
+        self._pulse = (self._pulse + dt * 2.5) % (2 * math.pi)
+        self.rect.center = (int(self.pos.x), int(self.pos.y))

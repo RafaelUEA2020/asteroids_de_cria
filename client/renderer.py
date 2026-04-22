@@ -4,7 +4,7 @@ import math
 import pygame as pg
 
 from core import config as C
-from core.entities import Asteroid, Bullet, Ship, UFO, ShieldPickup
+from core.entities import Asteroid, BlackHole, Bullet, Ship, UFO, ShieldPickup
 from core.scene import SceneState
 
 
@@ -29,6 +29,7 @@ class Renderer:
             Ship: self._draw_ship,
             UFO: self._draw_ufo,
             ShieldPickup: self._draw_shield_pickup,
+            BlackHole: self._draw_black_hole,
         }
 
     def clear(self) -> None:
@@ -169,3 +170,35 @@ class Renderer:
         cup = pg.Rect(0, 0, int(width * 0.5), int(height * 0.7))
         cup.center = (int(ufo.pos.x), int(ufo.pos.y - height * 0.3))
         pg.draw.ellipse(self.screen, self.config.WHITE, cup, width=1)
+
+    def _draw_black_hole(self, black_hole: BlackHole) -> None:
+        cx, cy = int(black_hole.pos.x), int(black_hole.pos.y)
+        pulse = (math.sin(black_hole._pulse) + 1.0) * 0.5
+        ring_radius = int(black_hole.attract_radius * (0.72 + pulse * 0.08))
+
+        pg.draw.circle(
+            self.screen,
+            self.config.BLACK_HOLE_COLOR,
+            (cx, cy),
+            ring_radius,
+            width=1,
+        )
+        pg.draw.circle(
+            self.screen,
+            self.config.BLACK_HOLE_COLOR,
+            (cx, cy),
+            int(black_hole.r * 1.5),
+            width=2,
+        )
+        pg.draw.circle(
+            self.screen,
+            self.config.WHITE,
+            (cx, cy),
+            black_hole.r,
+        )
+        pg.draw.circle(
+            self.screen,
+            self.config.BLACK,
+            (cx, cy),
+            max(4, black_hole.r - 6),
+        )
