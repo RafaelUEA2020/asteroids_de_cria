@@ -46,6 +46,10 @@ class Game:
 
         self.sounds = load_sounds(C.SOUND_PATH)
         self.audio = AudioManager(self.sounds)
+        
+        self.freeze_cooldown = C.FREEZE_COOLDOWN
+        self.freeze_duration = C.FREEZE_DURATION
+        self.freeze_cd_timer = 0.0
 
     def run(self) -> None:
         while self.running:
@@ -96,6 +100,15 @@ class Game:
         self.audio.update_thrust(cmd.thrust)
         self.audio.update_ufo_siren(list(self.world.ufos))
         self.audio.play_events(self.world.events)
+        
+        # cooldown
+        if self.freeze_cd_timer > 0:
+            self.freeze_cd_timer -= dt
+
+        # input freeze (CORRETO)
+        if self.input_mapper.consume_freeze() and self.freeze_cd_timer <= 0:
+            self.world.activate_freeze(self.freeze_duration)
+            self.freeze_cd_timer = self.freeze_cooldown
 
     def _draw(self) -> None:
         self.renderer.clear()
@@ -116,6 +129,7 @@ class Game:
             self.world.lives.get(C.LOCAL_PLAYER_ID, 0),
             self.world.wave,
             self.scene,
+            self.freeze_cd_timer
         )
         pg.display.flip()
 
