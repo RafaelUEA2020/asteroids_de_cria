@@ -9,7 +9,7 @@ import pygame as pg
 from core import config as C
 from core.collisions import CollisionManager
 from core.commands import PlayerCommand
-from core.entities import Asteroid, BlackHole, Ship, UFO
+from core.entities import Asteroid, BlackHole, Ship, UFO, WeaponPickup
 from core.utils import Vec, rand_edge_pos
 
 PlayerId = int
@@ -29,6 +29,7 @@ class World:
         self.asteroids = pg.sprite.Group()
         self.ufos = pg.sprite.Group()
         self.shields = pg.sprite.Group() 
+        self.weapon_pickups = pg.sprite.Group()
         self.black_holes = pg.sprite.Group()
         self.all_sprites = pg.sprite.Group()
 
@@ -45,7 +46,7 @@ class World:
         self.shield_spawn_timer = float(C.SHIELD_SPAWN_DELAY_MIN)
         self.black_hole_spawn_timer = float(C.BLACK_HOLE_SPAWN_DELAY_MIN)
         self.spawn_player(C.LOCAL_PLAYER_ID)
-        
+
 
     def begin_frame(self) -> None:
         self.events.clear()
@@ -134,7 +135,7 @@ class World:
                 # Se ainda houver vaga no mapa (limite de 2)
                 if len(self.shields) < C.SHIELD_MAX_PICKUPS:
                     self.spawn_shield_pickup()
-                
+
                 # Sorteia o próximo tempo baseado no seu config.py
                 self.shield_spawn_timer = uniform(
                     C.SHIELD_SPAWN_DELAY_MIN, 
@@ -168,10 +169,12 @@ class World:
                     0, self.scores[player_id] - C.HYPERSPACE_COST
                 )
 
-            bullet = ship.apply_command(cmd, dt, self.bullets)
-            if bullet is not None:
+            # fire() agora retorna lista
+            new_bullets = ship.apply_command(cmd, dt, self.bullets)
+            for bullet in new_bullets:
                 self.bullets.add(bullet)
                 self.all_sprites.add(bullet)
+            if new_bullets:
                 self.events.append("player_shoot")
 
     def _update_ufos(self, dt: float) -> None:
@@ -181,7 +184,6 @@ class World:
             if not ufo.alive():
                 continue
 
-            ufo.target_pos = self._get_nearest_ship_pos(ufo.pos)
             bullet = ufo.try_fire()
             if bullet is not None:
                 self.bullets.add(bullet)
@@ -235,13 +237,38 @@ class World:
         if self.wave_cool <= 0.0:
             self.start_wave()
             self.wave_cool = float(C.WAVE_DELAY)
+    def _try_spawn_weapon_pickup(self, pos: Vec,force: bool = False) -> None:
+        import random
+        import random
+        # Se force for True, ignora a chance aleatória
+        if not force and random.random() > C.WEAPON_PICKUP_CHANCE:
+            return
+        
+        if random.random() > C.WEAPON_PICKUP_CHANCE:
+            return
+        if len(self.weapon_pickups) >= C.WEAPON_MAX_PICKUPS:
+            return
+        for p in self.weapon_pickups:
+            if (p.pos - pos).length() < C.WEAPON_PICKUP_SEPARATION:
+                return
+        wp = WeaponPickup(pos)
+        self.weapon_pickups.add(wp)
+        self.all_sprites.add(wp)
 
     def _handle_collisions(self) -> None:
+        # Colisão com shield pickups
         for player_id, ship in self.ships.items():
             pickups_hit = pg.sprite.spritecollide(ship, self.shields, True)
             if pickups_hit:
                 ship.activate_shield() 
                 self.events.append("shield_up") 
+
+        # Colisão com weapon pickups
+        for player_id, ship in self.ships.items():
+            wp_hit = pg.sprite.spritecollide(ship, self.weapon_pickups, True)
+            for wp in wp_hit:
+                ship.apply_weapon(wp.mode)
+                self.events.append("shield_up")   # reutiliza som de coleta
 
         result = self._collision_mgr.resolve(
             self.ships, self.bullets, self.asteroids, self.ufos,
@@ -255,6 +282,10 @@ class World:
 
         for pos, vel, size in result.asteroids_to_spawn:
             self.spawn_asteroid(pos, vel, size)
+            # Tenta dropar weapon pickup ao destruir fragmento L
+            if size == "M":
+                print(f"DEBUG: Tentando drop de arma em {pos}")
+                self._try_spawn_weapon_pickup(pos)
 
         for player_id in result.ship_deaths:
             ship = self.get_ship(player_id)
@@ -273,7 +304,7 @@ class World:
 
     def _ship_die(self, ship: Ship) -> None:
         pid = ship.player_id
-        self.lives[pid] = self.lives[pid] - 1
+        self.lives[pid] -= 1
         ship.pos.xy = (C.WIDTH / 2, C.HEIGHT / 2)
         ship.vel.xy = (0, 0)
         ship.angle = -90.0
