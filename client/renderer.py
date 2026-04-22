@@ -59,29 +59,29 @@ class Renderer:
         text = f"SCORE {score:06d}   LIVES {lives}   WAVE {wave}"
         label = self.font.render(text, True, self.config.WHITE)
         self.screen.blit(label, (10, 10))
-    
-        # 🔥 HUD DO FREEZE (canto esquerdo abaixo do score)
+
+        # HUD DO FREEZE (canto esquerdo abaixo do score)
         if freeze_cd <= 0:
             freeze_text = "FREEZE: READY"
             color = (100, 255, 100) if pg.time.get_ticks() % 500 < 250 else (255, 255, 255)
         else:
-            freeze_text = f"FREEZE: {freeze_cd:.1f}s"
+            freeze_text = f"FREEZE: {max(0, freeze_cd):.1f}s"
             color = self.config.WHITE
-    
+
         label_freeze = self.font.render(freeze_text, True, color)
         self.screen.blit(label_freeze, (10, 40))
-    
-        # 🔫 HUD do power-up de arma (canto superior direito)
+
+        # HUD do power-up de arma (canto superior direito)
         if ship is not None and ship.weapon_mode and ship.weapon_time > 0:
             mode_names = {"double": "DUPLO", "triple": "TRIPLO", "rapid": "RAPIDO"}
             name = mode_names.get(ship.weapon_mode, "")
             col = getattr(self.config, "WEAPON_PICKUP_COLOR", (255, 220, 80))
-    
+
             wl = self.font.render(
                 f"ARMA: {name}  {ship.weapon_time:.1f}s", True, col
             )
             self.screen.blit(wl, (self.config.WIDTH - wl.get_width() - 10, 10))
-    
+
             bw = max(1, int(150 * (ship.weapon_time / self.config.WEAPON_DURATION)))
             pg.draw.rect(
                 self.screen,
