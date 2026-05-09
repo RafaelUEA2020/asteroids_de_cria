@@ -158,7 +158,12 @@ class Renderer:
         # Corpo da nave
         p1, p2, p3 = ship.ship_points()
         points = [(int(p.x), int(p.y)) for p in (p1, p2, p3)]
-        pg.draw.polygon(self.screen, self.config.WHITE, points, width=1)
+        color = self.config.WHITE
+
+        if ship.player_id == C.LOCAL_PLAYER_2_ID:
+            color = self.config.BLUE
+
+        pg.draw.polygon(self.screen, color, points, width=1)
 
         if ship.invuln > 0.0 and int(ship.invuln * 10) % 2 == 0:
             pg.draw.circle(
