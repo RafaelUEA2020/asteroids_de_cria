@@ -29,9 +29,8 @@ class Game:
         self.screen = pg.display.set_mode((C.WIDTH, C.HEIGHT))
         pg.display.set_caption("Asteroids")
         
+        # detectar os controles
         pg.joystick.init()
-        
-        #detectar os controles
         self.joysticks = []
 
         for i in range(pg.joystick.get_count()):
@@ -92,7 +91,6 @@ class Game:
 
         self.scene = SceneState.MENU
         self.world = World()
-        #self.input_mapper = InputMapper()
 
         self.sounds = load_sounds(C.SOUND_PATH)
         self.audio = AudioManager(self.sounds)
@@ -130,7 +128,6 @@ class Game:
                 continue
 
             if self.scene == SceneState.PLAY:
-                #self.input_mapper.handle_event(event)
                 self.input1.handle_event(event)
                 self.input2.handle_event(event)
 
