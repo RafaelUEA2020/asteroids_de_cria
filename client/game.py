@@ -6,7 +6,7 @@
 """
 
 import sys
-
+import os
 import pygame as pg
 
 from core import config as C
@@ -16,7 +16,7 @@ from client.audio_manager import AudioManager
 from client.controls import InputMapper
 from client.renderer import Renderer
 from core.world import World
-
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'core')))
 
 class Game:
     """Orchestrates input -> update -> draw."""
@@ -186,7 +186,9 @@ class Game:
             self.world.lives.get(C.LOCAL_PLAYER_ID, 0),
             self.world.wave,
             self.scene,
-            self.freeze_cd_timer
+            self.freeze_cd_timer,
+            score_p2=self.world.scores.get(C.LOCAL_PLAYER_2_ID, 0),
+            lives_p2=self.world.lives.get(C.LOCAL_PLAYER_2_ID, 0),
         )
         pg.display.flip()
 

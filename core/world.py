@@ -20,7 +20,7 @@ class World:
 
     Multiplayer-ready:
     - World receives commands indexed by player_id.
-    - World generates events (strings) for the client (sounds/effects).
+    - World generates events for the client.
     """
 
     def __init__(self) -> None:
@@ -28,7 +28,7 @@ class World:
         self.bullets = pg.sprite.Group()
         self.asteroids = pg.sprite.Group()
         self.ufos = pg.sprite.Group()
-        self.shields = pg.sprite.Group() 
+        self.shields = pg.sprite.Group()
         self.weapon_pickups = pg.sprite.Group()
         self.black_holes = pg.sprite.Group()
         self.all_sprites = pg.sprite.Group()
@@ -45,26 +45,26 @@ class World:
         self.game_over = False
         self.shield_spawn_timer = float(C.SHIELD_SPAWN_DELAY_MIN)
         self.black_hole_spawn_timer = float(C.BLACK_HOLE_SPAWN_DELAY_MIN)
+
         self.spawn_player(C.LOCAL_PLAYER_ID)
         self.spawn_player(C.LOCAL_PLAYER_2_ID)
-        
+
         self.freeze_active = False
         self.freeze_timer = 0.0
-        
 
     def begin_frame(self) -> None:
         self.events.clear()
 
     def reset(self) -> None:
-        """Reset the world (used on Game Over)."""
+        """Reset the world."""
         self.__init__()
 
     def spawn_player(self, player_id: PlayerId) -> None:
         if player_id == C.LOCAL_PLAYER_ID:
-            pos = Vec(C.WIDTH * 0.35,  C.HEIGHT / 2)
+            pos = Vec(C.WIDTH * 0.35, C.HEIGHT / 2)
         else:
-            pos = Vec(C.WIDTH * 0.65,  C.HEIGHT / 2)
-            
+            pos = Vec(C.WIDTH * 0.65, C.HEIGHT / 2)
+
         ship = Ship(player_id, pos)
         ship.invuln = float(C.SAFE_SPAWN_TIME)
 
@@ -104,9 +104,9 @@ class World:
         small = uniform(0, 1) < 0.5
         pos = rand_edge_pos()
         target = self._get_nearest_ship_pos(pos)
+
         ufo = UFO(pos, small, target_pos=target)
         self.ufos.add(ufo)
-
         self.all_sprites.add(ufo)
 
     def update(
@@ -116,18 +116,17 @@ class World:
     ) -> None:
         self.begin_frame()
 
-        # Atualiza freeze
         if self.freeze_active:
             self.freeze_timer -= dt
             if self.freeze_timer <= 0.0:
                 self.freeze_active = False
-                
+
         if self.game_over:
             return
 
         self._apply_commands(dt, commands_by_player_id)
         self._apply_black_hole_gravity(dt)
-        
+
         for sprite in self.all_sprites:
             if self.freeze_active and isinstance(sprite, Asteroid):
                 continue
@@ -140,24 +139,20 @@ class World:
         self._maybe_start_next_wave(dt)
 
     def _update_timers(self, dt: float) -> None:
-        # Timer do UFO
         self.ufo_timer -= dt
         if self.ufo_timer <= 0.0:
             self.spawn_ufo()
             self.ufo_timer = float(C.UFO_SPAWN_EVERY)
 
-        # Lógica de Spawn Automático do Escudo
-        if self.wave > 0: # Só spawna se a partida começou
+        if self.wave > 0:
             self.shield_spawn_timer -= dt
             if self.shield_spawn_timer <= 0.0:
-                # Se ainda houver vaga no mapa (limite de 2)
                 if len(self.shields) < C.SHIELD_MAX_PICKUPS:
                     self.spawn_shield_pickup()
 
-                # Sorteia o próximo tempo baseado no seu config.py
                 self.shield_spawn_timer = uniform(
-                    C.SHIELD_SPAWN_DELAY_MIN, 
-                    C.SHIELD_SPAWN_DELAY_MAX
+                    C.SHIELD_SPAWN_DELAY_MIN,
+                    C.SHIELD_SPAWN_DELAY_MAX,
                 )
 
         if self.wave > 0:
@@ -184,14 +179,16 @@ class World:
             if cmd.hyperspace:
                 ship.hyperspace()
                 self.scores[player_id] = max(
-                    0, self.scores[player_id] - C.HYPERSPACE_COST
+                    0,
+                    self.scores[player_id] - C.HYPERSPACE_COST,
                 )
 
-            # fire() agora retorna lista
             new_bullets = ship.apply_command(cmd, dt, self.bullets)
+
             for bullet in new_bullets:
                 self.bullets.add(bullet)
                 self.all_sprites.add(bullet)
+
             if new_bullets:
                 self.events.append("player_shoot")
 
@@ -199,6 +196,7 @@ class World:
         for ufo in list(self.ufos):
             ufo.target_pos = self._get_nearest_ship_pos(ufo.pos)
             ufo.update(dt)
+
             if not ufo.alive():
                 continue
 
@@ -222,11 +220,13 @@ class World:
             for black_hole in self.black_holes:
                 offset = black_hole.pos - ship.pos
                 dist = offset.length()
+
                 if dist <= 1e-6 or dist > black_hole.attract_radius:
                     continue
 
                 influence = 1.0 - (dist / black_hole.attract_radius)
                 force = C.BLACK_HOLE_GRAVITY * influence
+
                 if force <= strongest_force:
                     continue
 
@@ -237,14 +237,16 @@ class World:
                 ship.vel += strongest_pull * dt
 
     def _get_nearest_ship_pos(self, from_pos: Vec) -> Vec | None:
-        """Return position of the nearest living ship to from_pos."""
+        """Return the nearest ship position."""
         nearest = None
         min_dist = float("inf")
+
         for ship in self.ships.values():
             d = (ship.pos - from_pos).length()
             if d < min_dist:
                 min_dist = d
                 nearest = ship
+
         return nearest.pos if nearest else None
 
     def _maybe_start_next_wave(self, dt: float) -> None:
@@ -255,54 +257,56 @@ class World:
         if self.wave_cool <= 0.0:
             self.start_wave()
             self.wave_cool = float(C.WAVE_DELAY)
-    def _try_spawn_weapon_pickup(self, pos: Vec,force: bool = False) -> None:
+
+    def _try_spawn_weapon_pickup(self, pos: Vec, force: bool = False) -> None:
         import random
-        import random
-        # Se force for True, ignora a chance aleatória
+
         if not force and random.random() > C.WEAPON_PICKUP_CHANCE:
             return
-        
-        if random.random() > C.WEAPON_PICKUP_CHANCE:
-            return
+
         if len(self.weapon_pickups) >= C.WEAPON_MAX_PICKUPS:
             return
-        for p in self.weapon_pickups:
-            if (p.pos - pos).length() < C.WEAPON_PICKUP_SEPARATION:
+
+        for pickup in self.weapon_pickups:
+            if (pickup.pos - pos).length() < C.WEAPON_PICKUP_SEPARATION:
                 return
+
         wp = WeaponPickup(pos)
         self.weapon_pickups.add(wp)
         self.all_sprites.add(wp)
 
     def _handle_collisions(self) -> None:
-        # Colisão com shield pickups
+        # Shield pickups
         for player_id, ship in self.ships.items():
             pickups_hit = pg.sprite.spritecollide(ship, self.shields, True)
             if pickups_hit:
-                ship.activate_shield() 
-                self.events.append("shield_up") 
+                ship.activate_shield()
+                self.events.append("shield_up")
 
-        # Colisão com weapon pickups
+        # Weapon pickups
         for player_id, ship in self.ships.items():
             wp_hit = pg.sprite.spritecollide(ship, self.weapon_pickups, True)
             for wp in wp_hit:
                 ship.apply_weapon(wp.mode)
-                self.events.append("shield_up")   # reutiliza som de coleta
+                self.events.append("shield_up")
 
         result = self._collision_mgr.resolve(
-            self.ships, self.bullets, self.asteroids, self.ufos,
+            self.ships,
+            self.bullets,
+            self.asteroids,
+            self.ufos,
         )
 
         self.events.extend(result.events)
 
         for player_id, delta in result.score_deltas.items():
             if player_id in self.scores:
-                self.scores[player_id] += delta
+                self._apply_score_with_kill_steal(player_id, delta)
 
         for pos, vel, size in result.asteroids_to_spawn:
             self.spawn_asteroid(pos, vel, size)
-            # Tenta dropar weapon pickup ao destruir fragmento L
+
             if size == "M":
-                print(f"DEBUG: Tentando drop de arma em {pos}")
                 self._try_spawn_weapon_pickup(pos)
 
         for player_id in result.ship_deaths:
@@ -310,25 +314,67 @@ class World:
             if ship is not None:
                 self._ship_die(ship)
 
+    def _apply_score_with_kill_steal(
+        self,
+        scorer_id: PlayerId,
+        base_score: int,
+    ) -> None:
+        """Apply score and steal points from the opponent."""
+
+        self.scores[scorer_id] += base_score
+
+        if not C.KILL_STEAL_ENABLED:
+            return
+
+        opponents = [
+            pid for pid in self.scores.keys()
+            if pid != scorer_id
+        ]
+
+        if not opponents:
+            return
+
+        opponent_id = opponents[0]
+        opponent_score = self.scores.get(opponent_id, 0)
+
+        if opponent_score <= 0:
+            return
+
+        steal_amount = int(base_score * C.KILL_STEAL_PERCENT)
+        steal_amount = max(C.KILL_STEAL_MIN_POINTS, steal_amount)
+        steal_amount = min(C.KILL_STEAL_MAX_POINTS, steal_amount)
+        steal_amount = min(steal_amount, opponent_score)
+
+        if steal_amount <= 0:
+            return
+
+        self.scores[opponent_id] -= steal_amount
+        self.scores[scorer_id] += steal_amount
+        self.events.append("kill_steal")
+
     def _handle_black_hole_capture(self) -> None:
         if self.game_over:
             return
 
         for ship in self.ships.values():
             for black_hole in self.black_holes:
-                if (ship.pos - black_hole.pos).length() < (ship.r + black_hole.capture_radius):
+                if (
+                    ship.pos - black_hole.pos
+                ).length() < (ship.r + black_hole.capture_radius):
                     self._black_hole_capture(ship)
                     return
 
     def _ship_die(self, ship: Ship) -> None:
         pid = ship.player_id
         self.lives[pid] -= 1
+
         ship.pos.xy = (C.WIDTH / 2, C.HEIGHT / 2)
         ship.vel.xy = (0, 0)
         ship.angle = -90.0
         ship.invuln = float(C.SAFE_SPAWN_TIME)
 
         self.events.append("ship_explosion")
+
         if all(v <= 0 for v in self.lives.values()):
             self.game_over = True
 
@@ -341,26 +387,28 @@ class World:
         if len(self.shields) >= C.SHIELD_MAX_PICKUPS:
             return
 
-        # Sorteia uma posição em qualquer lugar da tela
-        def get_random_pos():
+        def get_random_pos() -> Vec:
             return Vec(
-                uniform(60, C.WIDTH - 60), 
-                uniform(60, C.HEIGHT - 60)
+                uniform(60, C.WIDTH - 60),
+                uniform(60, C.HEIGHT - 60),
             )
 
         pos = get_random_pos()
-        
-        # Garante que não spawna colado no jogador
         ship_positions = [s.pos for s in self.ships.values()]
-        
-        # Tenta re-sortear se estiver muito perto de um jogador (limite de 10 tentativas para não travar)
+
         for _ in range(10):
-            if any((pos - sp).length() < C.SHIELD_PICKUP_SEPARATION for sp in ship_positions):
-                pos = get_random_pos()
-            else:
+            too_close = any(
+                (pos - sp).length() < C.SHIELD_PICKUP_SEPARATION
+                for sp in ship_positions
+            )
+
+            if not too_close:
                 break
 
-        from core.entities import ShieldPickup 
+            pos = get_random_pos()
+
+        from core.entities import ShieldPickup
+
         pickup = ShieldPickup(pos)
         self.shields.add(pickup)
         self.all_sprites.add(pickup)
@@ -384,12 +432,15 @@ class World:
                 (pos - ship_pos).length() < C.BLACK_HOLE_MIN_SHIP_DISTANCE
                 for ship_pos in ship_positions
             )
+
             too_close_to_hole = any(
                 (pos - black_hole.pos).length() < C.BLACK_HOLE_ATTRACT_RADIUS
                 for black_hole in self.black_holes
             )
+
             if not too_close_to_ship and not too_close_to_hole:
                 break
+
             pos = get_random_pos()
 
         black_hole = BlackHole(pos)
@@ -399,3 +450,4 @@ class World:
     def activate_freeze(self, duration: float) -> None:
         self.freeze_active = True
         self.freeze_timer = duration
+        

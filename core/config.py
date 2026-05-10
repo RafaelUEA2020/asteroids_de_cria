@@ -130,3 +130,9 @@ WEAPON_RAPID_MAX_BULLETS  = 8
 
 FREEZE_DURATION = 3.0
 FREEZE_COOLDOWN = 10.0
+
+# Kill Steal Mechanic
+KILL_STEAL_ENABLED = True
+KILL_STEAL_PERCENT = 0.25   # Percentage of the kill score
+KILL_STEAL_MIN_POINTS = 10  # minimum steal amount
+KILL_STEAL_MAX_POINTS = 50  # maximum steal amount
