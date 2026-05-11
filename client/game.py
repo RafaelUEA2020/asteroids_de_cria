@@ -28,7 +28,56 @@ class Game:
 
         self.screen = pg.display.set_mode((C.WIDTH, C.HEIGHT))
         pg.display.set_caption("Asteroids")
+        
+        # detectar os controles
+        pg.joystick.init()
+        self.joysticks = []
 
+        for i in range(pg.joystick.get_count()):
+            joy = pg.joystick.Joystick(i)
+            joy.init()
+            self.joysticks.append(joy)
+        print(f"Controles detectados: {len(self.joysticks)}")
+        
+        # =========================
+        # PLAYER 1 -> teclado
+        # =========================
+
+        self.input1 = InputMapper(
+            left=pg.K_a,
+            right=pg.K_d,
+            thrust=pg.K_w,
+            shoot=pg.K_SPACE,
+            hyperspace=pg.K_LSHIFT,
+            freeze=pg.K_f,
+        )
+        
+        # =========================
+        # PLAYER 2
+        # controle se existir
+        # senão teclado
+        # =========================
+
+        if len(self.joysticks) > 0:
+        
+            print("Player 2 usando controle")
+
+            self.input2 = InputMapper(
+                joystick=self.joysticks[0]
+            )
+
+        else:
+        
+            print("Player 2 usando teclado")
+
+            self.input2 = InputMapper(
+                left=pg.K_LEFT,
+                right=pg.K_RIGHT,
+                thrust=pg.K_UP,
+                shoot=pg.K_RETURN,
+                hyperspace=pg.K_RSHIFT,
+            )
+            
         self.clock = pg.time.Clock()
         self.running = True
 
@@ -42,7 +91,6 @@ class Game:
 
         self.scene = SceneState.MENU
         self.world = World()
-        self.input_mapper = InputMapper()
 
         self.sounds = load_sounds(C.SOUND_PATH)
         self.audio = AudioManager(self.sounds)
@@ -80,16 +128,22 @@ class Game:
                 continue
 
             if self.scene == SceneState.PLAY:
-                self.input_mapper.handle_event(event)
+                self.input1.handle_event(event)
+                self.input2.handle_event(event)
 
     def _update(self, dt: float) -> None:
         if self.scene != SceneState.PLAY:
             return
 
         keys = pg.key.get_pressed()
-        cmd = self.input_mapper.build_command(keys)
-        commands = {C.LOCAL_PLAYER_ID: cmd}
+        cmd1 = self.input1.build_command(keys)
+        cmd2 = self.input2.build_command(keys)
 
+        commands = {
+            C.LOCAL_PLAYER_ID: cmd1,
+            C.LOCAL_PLAYER_2_ID: cmd2,
+        }
+        
         self.world.update(dt, commands)
 
         if self.world.game_over:
@@ -97,7 +151,10 @@ class Game:
             self.scene = SceneState.GAME_OVER
             return
 
-        self.audio.update_thrust(cmd.thrust)
+        self.audio.update_thrust(
+            cmd1.thrust or cmd2.thrust
+        )
+        
         self.audio.update_ufo_siren(list(self.world.ufos))
         self.audio.play_events(self.world.events)
         
@@ -106,7 +163,7 @@ class Game:
             self.freeze_cd_timer -= dt
 
         # input freeze (CORRETO)
-        if self.input_mapper.consume_freeze() and self.freeze_cd_timer <= 0:
+        if self.input1.consume_freeze() and self.freeze_cd_timer <= 0:
             self.world.activate_freeze(self.freeze_duration)
             self.freeze_cd_timer = self.freeze_cooldown
 

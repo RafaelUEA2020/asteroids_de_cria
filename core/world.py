@@ -46,6 +46,7 @@ class World:
         self.shield_spawn_timer = float(C.SHIELD_SPAWN_DELAY_MIN)
         self.black_hole_spawn_timer = float(C.BLACK_HOLE_SPAWN_DELAY_MIN)
         self.spawn_player(C.LOCAL_PLAYER_ID)
+        self.spawn_player(C.LOCAL_PLAYER_2_ID)
         
         self.freeze_active = False
         self.freeze_timer = 0.0
@@ -59,7 +60,11 @@ class World:
         self.__init__()
 
     def spawn_player(self, player_id: PlayerId) -> None:
-        pos = Vec(C.WIDTH / 2, C.HEIGHT / 2)
+        if player_id == C.LOCAL_PLAYER_ID:
+            pos = Vec(C.WIDTH * 0.35,  C.HEIGHT / 2)
+        else:
+            pos = Vec(C.WIDTH * 0.65,  C.HEIGHT / 2)
+            
         ship = Ship(player_id, pos)
         ship.invuln = float(C.SAFE_SPAWN_TIME)
 
