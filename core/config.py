@@ -23,6 +23,8 @@ SHIP_FRICTION = 0.995
 SHIP_FIRE_RATE = 0.2
 SHIP_BULLET_SPEED = 420.0
 HYPERSPACE_COST = 250
+SHIP_PUSH_RESTITUTION = 0.35
+SHIP_PUSH_POSITION_SLOP = 0.5
 
 # Shield Mechanics
 SHIELD_DURATION = 3.0            # Quanto tempo o escudo fica ativo na nave

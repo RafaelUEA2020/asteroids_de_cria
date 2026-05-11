@@ -1,6 +1,7 @@
 """Collision detection and resolution."""
 
 from dataclasses import dataclass, field
+from itertools import combinations
 from random import uniform
 
 import pygame as pg
@@ -34,9 +35,47 @@ class CollisionManager:
         self._bullets_vs_asteroids(bullets, asteroids, result)
         self._ufo_vs_player_bullets(ufos, bullets, result)
         self._ufo_vs_asteroids(ufos, asteroids, result)
+        self._ship_vs_ships(ships)
         self._ship_vs_asteroids(ships, asteroids, result)
         self._ship_vs_ufo_bullets(ships, bullets, result)
         return result
+
+    def _ship_vs_ships(self, ships: dict[PlayerId, Ship]) -> None:
+        """Separate colliding ships and transfer impact velocity."""
+        min_dist = C.SHIP_RADIUS * 2
+
+        for ship_a, ship_b in combinations(ships.values(), 2):
+            offset = ship_b.pos - ship_a.pos
+            dist_sq = offset.length_squared()
+
+            if dist_sq >= min_dist * min_dist:
+                continue
+
+            if dist_sq <= 1e-6:
+                normal = Vec(1, 0)
+                dist = 0.0
+            else:
+                dist = dist_sq ** 0.5
+                normal = offset / dist
+
+            overlap = min_dist - dist + C.SHIP_PUSH_POSITION_SLOP
+            correction = normal * (overlap / 2)
+            ship_a.pos -= correction
+            ship_b.pos += correction
+
+            relative_vel = ship_b.vel - ship_a.vel
+            closing_speed = relative_vel.dot(normal)
+            if closing_speed < 0.0:
+                impulse = -(1.0 + C.SHIP_PUSH_RESTITUTION) * closing_speed / 2
+                ship_a.vel -= normal * impulse
+                ship_b.vel += normal * impulse
+
+            ship_a.pos.x %= C.WIDTH
+            ship_a.pos.y %= C.HEIGHT
+            ship_b.pos.x %= C.WIDTH
+            ship_b.pos.y %= C.HEIGHT
+            ship_a.rect.center = (int(ship_a.pos.x), int(ship_a.pos.y))
+            ship_b.rect.center = (int(ship_b.pos.x), int(ship_b.pos.y))
 
     def _bullets_vs_asteroids(
         self,
